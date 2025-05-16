@@ -69,7 +69,7 @@ func main() {
 					}
 				}
 			} else {
-				fmt.Printf("PR: %s, Title: \"%s\">, is unmerged and waiting for your review!\n", prBrowserFriendlyURL, pr.GetTitle())
+				fmt.Printf("PR: %s, Title: \"%s\", is unmerged and waiting for your review!\n", prBrowserFriendlyURL, pr.GetTitle())
 			}
 
 		}
