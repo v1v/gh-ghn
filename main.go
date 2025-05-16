@@ -5,21 +5,38 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/google/go-github/v72/github"
-	"golang.org/x/oauth2"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/google/go-github/v72/github"
+	"golang.org/x/oauth2"
 )
 
 func main() {
 	noPrompt := flag.Bool("no-prompt", false, "Skip confirmation prompts")
+	onlyRepos := flag.String("only-repos", "", "Comma-separated list of repositories to include (owner/repo)")
+	excludeRepos := flag.String("exclude-repos", "", "Comma-separated list of repositories to exclude (owner/repo)")
 	flag.Parse()
 
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
 		log.Fatal("Please set the GITHUB_TOKEN environment variable.")
+	}
+
+	var onlyReposSet, excludeReposSet map[string]struct{}
+	if *onlyRepos != "" {
+		onlyReposSet = make(map[string]struct{})
+		for _, repo := range strings.Split(*onlyRepos, ",") {
+			onlyReposSet[strings.TrimSpace(repo)] = struct{}{}
+		}
+	}
+	if *excludeRepos != "" {
+		excludeReposSet = make(map[string]struct{})
+		for _, repo := range strings.Split(*excludeRepos, ",") {
+			excludeReposSet[strings.TrimSpace(repo)] = struct{}{}
+		}
 	}
 
 	ctx := context.Background()
@@ -35,6 +52,18 @@ func main() {
 		if subject.GetType() == "PullRequest" {
 			// Extract PR metadata
 			repoFullName := strings.TrimPrefix(notification.GetRepository().GetFullName(), "repos/")
+
+			if onlyReposSet != nil {
+				if _, ok := onlyReposSet[repoFullName]; !ok {
+					continue
+				}
+			}
+			if excludeReposSet != nil {
+				if _, ok := excludeReposSet[repoFullName]; ok {
+					continue
+				}
+			}
+
 			prURL := subject.GetURL()
 			parts := strings.Split(prURL, "/")
 			owner := parts[4]
@@ -71,7 +100,6 @@ func main() {
 			} else {
 				fmt.Printf("PR: %s, Title: \"%s\", is unmerged and waiting for your review!\n", prBrowserFriendlyURL, pr.GetTitle())
 			}
-
 		}
 	}
 }
