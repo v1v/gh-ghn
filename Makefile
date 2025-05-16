@@ -5,3 +5,6 @@ build:
 
 run: build
 	./$(APP)
+
+scan:
+	trufflehog git file://.
