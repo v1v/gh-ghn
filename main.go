@@ -16,6 +16,7 @@ import (
 
 func main() {
 	noPrompt := flag.Bool("no-prompt", false, "Skip confirmation prompts")
+	markDone := flag.Bool("mark-done", false, "Mark notifications as done")
 	onlyRepos := flag.String("only-repos", "", "Comma-separated list of repositories to include (owner/repo)")
 	excludeRepos := flag.String("exclude-repos", "", "Comma-separated list of repositories to exclude (owner/repo)")
 	flag.Parse()
@@ -43,6 +44,11 @@ func main() {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
+	markingBehavior := "read"
+	if *markDone {
+		markingBehavior = "done"
+	}
+
 	client := github.NewClient(oauth2.NewClient(ctx, ts))
 
 	allNotifications := getUnreadNotifications(client, ctx)
@@ -87,14 +93,18 @@ func main() {
 				if notificationIsRead {
 					continue
 				}
-				fmt.Printf("🟡 PR: %s, Title: \"%s\", is merged or closed and notification will be marked as read\n", prBrowserFriendlyURL, prTitle)
+				fmt.Printf("🟡 PR: %s, Title: \"%s\", is merged or closed and notification will be marked as %s\n", prBrowserFriendlyURL, prTitle, markingBehavior)
 
 				threadID := getNotificationThreadID(allNotifications, owner, repo, prNumber)
 				if threadID != "" {
-					fmt.Printf("  🟡 \033[33mAbout to mark related GH Notification with threadID: \"%s\" as *READ*\033[0m\n", threadID)
+					fmt.Printf("  🟡 \033[33mAbout to mark related GH Notification with threadID: \"%s\" as *%s*\033[0m\n", threadID, strings.ToUpper(markingBehavior))
 
 					if promptProceed(*noPrompt) {
-						markNotificationRead(client, ctx, threadID)
+						if *markDone {
+							markNotificationDone(client, ctx, threadID)
+						} else {
+							markNotificationRead(client, ctx, threadID)
+						}
 					}
 				}
 			} else {
@@ -143,6 +153,20 @@ func markNotificationRead(client *github.Client, ctx context.Context, threadID s
 		log.Printf("    ❌ Failed to mark thread %s as read: %v\n", threadID, err)
 	} else {
 		fmt.Printf("    🟢 Successfully marked thread as read\n")
+	}
+}
+
+func markNotificationDone(client *github.Client, ctx context.Context, threadID string) {
+	threadIDInt, err := strconv.Atoi(threadID)
+	if err != nil {
+		log.Printf("    ❌ Failed to convert thread ID %s to int: %v\n", threadID, err)
+		return
+	}
+	_, err = client.Activity.MarkThreadDone(ctx, int64(threadIDInt))
+	if err != nil {
+		log.Printf("    ❌ Failed to mark thread %s as done: %v\n", threadID, err)
+	} else {
+		fmt.Printf("    ✅ Successfully marked thread %s as done\n", threadID)
 	}
 }
 
