@@ -13,6 +13,8 @@ This little Go script will go thought the list of unread notifications and mark 
 closed. Then you can use the [Unread view](https://github.com/notifications?query=is%3Aunread) to help focus only on
 actionable notifications.
 
+Alternatively, you can even mark notifications as done via `--mark-done` rather than mark them as`read`.
+
 Note that this script doesn't do anything related to the unread status of **issues** and solely focuses on PRs.
 
 ## Prerequisites
@@ -53,3 +55,8 @@ PR: https://github.com/testorg/anotherrepo/pull/203, Title: "Another PR descript
 ```
 
 For each notification change you'll be prompted for y/n, but you can skip by `./ghn --no-prompt` (assumes yes).
+
+## Installation
+
+You can also using `make install` which will install the tool (by default) under `/usr/local/bin/ghn`.
+The destination path can be modified via the env var `DESTINATION_PATH`.
