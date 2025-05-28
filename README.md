@@ -60,3 +60,19 @@ For each notification change you'll be prompted for y/n, but you can skip by `./
 
 You can also using `make install` which will install the tool (by default) under `/usr/local/bin/ghn`.
 The destination path can be modified via the env var `DESTINATION_PATH`.
+
+### gh extension
+
+```shell
+gh extension install v1v/ghn
+```
+
+### Upgrade
+
+```shell
+gh extension upgrade ghn
+```
+
+## Release
+
+Please follow the process in [RELEASE.md](RELEASE.md) to create a new release of the extension.
