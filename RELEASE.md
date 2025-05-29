@@ -1,7 +1,7 @@
 # Release
 
 The release process is based on the GitHub CLI release process and utilizes the
-[gh-extension-precompile](https://github.com/cli/gh-extension-precompile) action.
+[goreleaser](http://goreleaser.com/) tool.
 
 ## Release Process
 
