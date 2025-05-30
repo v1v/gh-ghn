@@ -11,7 +11,7 @@ runs:
   using: "composite"
   steps:
     # See https://goreleaser.com/blog/supply-chain-security/
-    - uses: anchore/sbom-action/download-syft@61119d458adab75f756bc0b9e4bde25725f86a7a #v0.17.2
+    - uses: anchore/sbom-action/download-syft@e11c554f704a0b820cbf8c51673f6945e0731532 #v0.20.0
 
     - name: Set up Go
       uses: actions/setup-go@v5
