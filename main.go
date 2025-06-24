@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/go-github/v72/github"
 	"golang.org/x/oauth2"
@@ -19,6 +20,7 @@ func main() {
 	markDone := flag.Bool("mark-done", false, "Mark notifications as done")
 	onlyRepos := flag.String("only-repos", "", "Comma-separated list of repositories to include (owner/repo)")
 	excludeRepos := flag.String("exclude-repos", "", "Comma-separated list of repositories to exclude (owner/repo)")
+	concurrency := flag.Int("concurrency", 1, "Number of concurrent workers for processing notifications")
 	flag.Parse()
 
 	token := os.Getenv("GITHUB_TOKEN")
@@ -53,10 +55,10 @@ func main() {
 
 	allNotifications := getUnreadNotifications(client, ctx)
 
+	var prNotifications []*github.Notification
 	for _, notification := range allNotifications {
 		subject := notification.GetSubject()
 		if subject.GetType() == "PullRequest" {
-			// Extract PR metadata
 			repoFullName := strings.TrimPrefix(notification.GetRepository().GetFullName(), "repos/")
 
 			if onlyReposSet != nil {
@@ -70,48 +72,11 @@ func main() {
 				}
 			}
 
-			prURL := subject.GetURL()
-			parts := strings.Split(prURL, "/")
-			owner := parts[4]
-			repo := parts[5]
-			prNumber := parts[len(parts)-1]
-			prBrowserFriendlyURL := apiToWebURL(prURL)
-
-			ownerRepo := strings.Split(repoFullName, "/")
-			pr, _, err := client.PullRequests.Get(ctx, ownerRepo[0], ownerRepo[1], atoi(prNumber))
-			if err != nil {
-				log.Printf("Error fetching PR %s: %v\n", prURL, err)
-				continue
-			}
-
-			prTitle := pr.GetTitle()
-			prIsMerged := pr.GetMerged()
-			prIsClosed := pr.GetState() == "closed"
-			notificationIsRead := notification.GetUnread() == false
-
-			if prIsMerged || prIsClosed {
-				if notificationIsRead {
-					continue
-				}
-				fmt.Printf("🟡 PR: %s, Title: \"%s\", is merged or closed and notification will be marked as %s\n", prBrowserFriendlyURL, prTitle, markingBehavior)
-
-				threadID := getNotificationThreadID(allNotifications, owner, repo, prNumber)
-				if threadID != "" {
-					fmt.Printf("  🟡 \033[33mAbout to mark related GH Notification with threadID: \"%s\" as *%s*\033[0m\n", threadID, strings.ToUpper(markingBehavior))
-
-					if promptProceed(*noPrompt) {
-						if *markDone {
-							markNotificationDone(client, ctx, threadID)
-						} else {
-							markNotificationRead(client, ctx, threadID)
-						}
-					}
-				}
-			} else {
-				fmt.Printf("PR: %s, Title: \"%s\", is unmerged and waiting for your review!\n", prBrowserFriendlyURL, pr.GetTitle())
-			}
+			prNotifications = append(prNotifications, notification)
 		}
 	}
+
+	processNotifications(client, ctx, prNotifications, allNotifications, *concurrency, *noPrompt, *markDone, markingBehavior)
 }
 
 func getUnreadNotifications(client *github.Client, ctx context.Context) []*github.Notification {
@@ -211,4 +176,72 @@ func apiToWebURL(apiURL string) string {
 	// Convert API URL to GitHub Web URL
 	url := strings.Replace(apiURL, "https://api.github.com/repos/", "https://github.com/", 1)
 	return strings.Replace(url, "/pulls/", "/pull/", 1)
+}
+
+func processNotifications(client *github.Client, ctx context.Context, prNotifications []*github.Notification, allNotifications []*github.Notification, concurrency int, noPrompt bool, markDone bool, markingBehavior string) {
+	if len(prNotifications) == 0 {
+		return
+	}
+
+	semaphore := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	for _, notification := range prNotifications {
+		wg.Add(1)
+		go func(n *github.Notification) {
+			defer wg.Done()
+
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			processNotification(client, ctx, n, allNotifications, noPrompt, markDone, markingBehavior)
+		}(notification)
+	}
+
+	wg.Wait()
+}
+
+func processNotification(client *github.Client, ctx context.Context, notification *github.Notification, allNotifications []*github.Notification, noPrompt bool, markDone bool, markingBehavior string) {
+	subject := notification.GetSubject()
+	prURL := subject.GetURL()
+	parts := strings.Split(prURL, "/")
+	owner := parts[4]
+	repo := parts[5]
+	prNumber := parts[len(parts)-1]
+	prBrowserFriendlyURL := apiToWebURL(prURL)
+
+	repoFullName := strings.TrimPrefix(notification.GetRepository().GetFullName(), "repos/")
+	ownerRepo := strings.Split(repoFullName, "/")
+	pr, _, err := client.PullRequests.Get(ctx, ownerRepo[0], ownerRepo[1], atoi(prNumber))
+	if err != nil {
+		log.Printf("Error fetching PR %s: %v\n", prURL, err)
+		return
+	}
+
+	prTitle := pr.GetTitle()
+	prIsMerged := pr.GetMerged()
+	prIsClosed := pr.GetState() == "closed"
+	notificationIsRead := !notification.GetUnread()
+
+	if prIsMerged || prIsClosed {
+		if notificationIsRead {
+			return
+		}
+		fmt.Printf("🟡 PR: %s, Title: \"%s\", is merged or closed and notification will be marked as %s\n", prBrowserFriendlyURL, prTitle, markingBehavior)
+
+		threadID := getNotificationThreadID(allNotifications, owner, repo, prNumber)
+		if threadID != "" {
+			fmt.Printf("  🟡 \033[33mAbout to mark related GH Notification with threadID: \"%s\" as *%s*\033[0m\n", threadID, strings.ToUpper(markingBehavior))
+
+			if promptProceed(noPrompt) {
+				if markDone {
+					markNotificationDone(client, ctx, threadID)
+				} else {
+					markNotificationRead(client, ctx, threadID)
+				}
+			}
+		}
+	} else {
+		fmt.Printf("PR: %s, Title: \"%s\", is unmerged and waiting for your review!\n", prBrowserFriendlyURL, pr.GetTitle())
+	}
 }
