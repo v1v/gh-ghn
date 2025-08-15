@@ -1,6 +1,6 @@
 APP := ghn
 DESTINATION_PATH ?= /usr/local/bin/$(APP)
-GOLANGCI_LINT_VERSION = "v1.61.0"
+GOLANGCI_LINT_VERSION = "v1.64.0"
 GORELEASER_VERSION = "v2.8.0"
 
 .PHONY: golangci-lint-version
