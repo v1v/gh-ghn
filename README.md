@@ -64,7 +64,7 @@ The destination path can be modified via the env var `DESTINATION_PATH`.
 ### gh extension
 
 ```shell
-gh extension install dliappis/gh-ghn
+gh extension install v1v/gh-ghn
 ```
 
 ### Upgrade
